@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>✨ AI Companion — Tsubaki</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; font-family: 'Segoe UI', system-ui, sans-serif; }
+
+  body {
+    background: linear-gradient(135deg, #0d0221 0%, #150734 25%, #1a0a3e 50%, #2d1b69 75%, #0d0221 100%);
+    background-size: 400% 400%;
+    animation: bgShift 20s ease infinite;
+  }
+  @keyframes bgShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  .stars { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+  .star {
+    position: absolute; background: #fff; border-radius: 50%;
+    animation: twinkle var(--dur) ease-in-out infinite;
+  }
+  @keyframes twinkle {
+    0%, 100% { opacity: 0.2; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+
+  #live2d-canvas {
+    position: fixed; top: 0; left: 0; z-index: 1;
+    width: 100%; height: 100%; cursor: pointer;
+  }
+
+  /* Loading */
+  #loading-screen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(13, 2, 33, 0.97);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 1000; transition: opacity 1s ease;
+  }
+  #loading-screen.hidden { opacity: 0; pointer-events: none; }
+  .loading-spinner {
+    width: 60px; height: 60px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top: 3px solid #ff6b9d;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 20px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: #ff6b9d; font-size: 18px; letter-spacing: 2px; animation: pulse 1.5s ease-in-out infinite; }
+  .loading-sub { color: rgba(255,255,255,0.5); font-size: 12px; margin-top: 10px; }
+  .loading-bar-container { width: 200px; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 15px; overflow: hidden; }
+  .loading-bar { height: 100%; width: 0%; background: linear-gradient(90deg, #ff6b9d, #c084fc); border-radius: 2px; transition: width 0.3s ease; }
+  @keyframes pulse { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+  /* Chat */
+  #chat-panel {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    z-index: 10; padding: 16px 20px 20px;
+    background: linear-gradient(to top, rgba(13, 2, 33, 0.95) 0%, rgba(13, 2, 33, 0.7) 60%, transparent 100%);
+    pointer-events: none;
+  }
+  #chat-panel > * { pointer-events: auto; }
+
+  #speech-bubble {
+    max-width: 680px; margin: 0 auto 12px;
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 107, 157, 0.25);
+    border-radius: 20px; padding: 16px 22px;
+    color: #fff; font-size: 15px; line-height: 1.65;
+    min-height: 44px;
+    box-shadow: 0 0 30px rgba(255, 107, 157, 0.08),
+                inset 0 0 30px rgba(255, 107, 157, 0.03);
+    display: none; transform: translateY(10px);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #speech-bubble.visible { display: block; transform: translateY(0); }
+  #speech-bubble .char-name {
+    color: #ff6b9d; font-weight: 700; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 2.5px; margin-bottom: 5px;
+  }
+  #speech-text { color: rgba(255,255,255,0.88); }
+  #speech-text .cursor {
+    display: inline-block; width: 2px; height: 15px;
+    background: #ff6b9d; margin-left: 2px;
+    animation: blink 0.7s step-end infinite; vertical-align: text-bottom;
+  }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+  #input-area {
+    max-width: 680px; margin: 0 auto;
+    display: flex; gap: 10px; align-items: center;
+  }
+  #text-input {
+    flex: 1; padding: 13px 20px;
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 107, 157, 0.2);
+    border-radius: 25px; color: #fff;
+    font-size: 14px; outline: none;
+    transition: all 0.3s ease;
+  }
+  #text-input:focus {
+    border-color: rgba(255, 107, 157, 0.5);
+    box-shadow: 0 0 25px rgba(255, 107, 157, 0.12);
+    background: rgba(255, 255, 255, 0.09);
+  }
+  #text-input::placeholder { color: rgba(255, 255, 255, 0.3); }
+
+  .btn {
+    width: 46px; height: 46px; border-radius: 50%;
+    border: 1px solid rgba(255, 107, 157, 0.35);
+    background: rgba(255, 107, 157, 0.12);
+    color: #ff6b9d; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.3s ease; font-size: 18px;
+    flex-shrink: 0;
+  }
+  .btn:hover {
+    background: rgba(255, 107, 157, 0.25);
+    box-shadow: 0 0 20px rgba(255, 107, 157, 0.25);
+    transform: scale(1.08);
+  }
+  .btn:active { transform: scale(0.94); }
+  .btn.speaking {
+    animation: speakPulse 0.6s ease-in-out infinite;
+    background: rgba(255, 107, 157, 0.35);
+  }
+  @keyframes speakPulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255, 107, 157, 0.3); }
+    50% { box-shadow: 0 0 25px rgba(255, 107, 157, 0.6); }
+  }
+
+  /* Side panels */
+  #expression-panel {
+    position: fixed; top: 20px; right: 20px;
+    z-index: 10; display: flex; flex-direction: column; gap: 7px;
+  }
+  .expr-btn {
+    width: 42px; height: 42px; border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; transition: all 0.3s ease;
+    position: relative;
+  }
+  .expr-btn:hover {
+    background: rgba(255, 107, 157, 0.2);
+    border-color: rgba(255, 107, 157, 0.4);
+    transform: translateX(-4px) scale(1.05);
+  }
+  .expr-btn .tooltip {
+    position: absolute; right: 52px; top: 50%; transform: translateY(-50%);
+    background: rgba(0,0,0,0.85); color: #fff; padding: 4px 10px;
+    border-radius: 6px; font-size: 11px; white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .expr-btn:hover .tooltip { opacity: 1; }
+
+  #controls {
+    position: fixed; top: 20px; left: 20px;
+    z-index: 10; display: flex; flex-direction: column; gap: 7px;
+  }
+  .ctrl-btn {
+    width: 42px; height: 42px; border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    color: #fff; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; transition: all 0.3s ease;
+    position: relative;
+  }
+  .ctrl-btn:hover {
+    background: rgba(255, 107, 157, 0.2);
+    border-color: rgba(255, 107, 157, 0.4);
+    transform: translateX(4px) scale(1.05);
+  }
+  .ctrl-btn .tooltip {
+    position: absolute; left: 52px; top: 50%; transform: translateY(-50%);
+    background: rgba(0,0,0,0.85); color: #fff; padding: 4px 10px;
+    border-radius: 6px; font-size: 11px; white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .ctrl-btn:hover .tooltip { opacity: 1; }
+  .ctrl-btn.active {
+    background: rgba(255, 107, 157, 0.25);
+    border-color: rgba(255, 107, 157, 0.5);
+    box-shadow: 0 0 12px rgba(255, 107, 157, 0.15);
+  }
+
+  /* Voice selector */
+  #voice-selector {
+    position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 20; display: none;
+    background: rgba(15, 5, 35, 0.95); backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 107, 157, 0.25);
+    border-radius: 16px; padding: 16px;
+    max-height: 320px; overflow-y: auto; min-width: 300px;
+  }
+  #voice-selector.visible { display: block; }
+  #voice-selector h3 { color: #ff6b9d; font-size: 12px; margin-bottom: 10px; letter-spacing: 1.5px; }
+  .voice-option {
+    padding: 7px 12px; color: rgba(255,255,255,0.6);
+    cursor: pointer; border-radius: 8px;
+    font-size: 12px; transition: all 0.2s;
+    margin-bottom: 2px;
+  }
+  .voice-option:hover { background: rgba(255, 107, 157, 0.15); color: #fff; }
+  .voice-option.selected { background: rgba(255, 107, 157, 0.25); color: #fff; }
+
+  #tts-status {
+    position: fixed; bottom: 145px; left: 50%; transform: translateX(-50%);
+    z-index: 10; padding: 6px 16px;
+    background: rgba(255, 107, 157, 0.12);
+    border: 1px solid rgba(255, 107, 157, 0.25);
+    border-radius: 20px; color: #ff6b9d;
+    font-size: 11px; letter-spacing: 1px;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none;
+  }
+  #tts-status.visible { opacity: 1; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255, 107, 157, 0.3); border-radius: 2px; }
+
+  /* Responsive */
+  @media (max-width: 600px) {
+    #expression-panel { top: 10px; right: 10px; }
+    #controls { top: 10px; left: 10px; }
+    .expr-btn, .ctrl-btn { width: 36px; height: 36px; font-size: 14px; border-radius: 10px; }
+    #chat-panel { padding: 10px 12px 14px; }
+    #text-input { padding: 11px 16px; font-size: 13px; }
+    .btn { width: 40px; height: 40px; }
+    #speech-bubble { padding: 12px 16px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stars" id="stars"></div>
+
+<div id="loading-screen">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">LOADING TSUBAKI</div>
+  <div class="loading-sub" id="loading-status">Initializing...</div>
+  <div class="loading-bar-container"><div class="loading-bar" id="loading-bar"></div></div>
+</div>
+
+<canvas id="live2d-canvas"></canvas>
+
+<div id="expression-panel">
+  <button class="expr-btn" onclick="setExpression('neutral')">😊<span class="tooltip">Neutral</span></button>
+  <button class="expr-btn" onclick="setExpression('blush')">😳<span class="tooltip">Blush</span></button>
+  <button class="expr-btn" onclick="setExpression('cry')">😢<span class="tooltip">Cry</span></button>
+  <button class="expr-btn" onclick="setExpression('angry')">😠<span class="tooltip">Dark Face</span></button>
+  <button class="expr-btn" onclick="setExpression('love')">😍<span class="tooltip">Heart Eyes</span></button>
+  <button class="expr-btn" onclick="setExpression('dead')">💀<span class="tooltip">No Highlights</span></button>
+</div>
+
+<div id="controls">
+  <button class="ctrl-btn active" id="btn-voice" onclick="toggleVoiceSelector()">🎤<span class="tooltip">Voice Settings</span></button>
+  <button class="ctrl-btn active" id="btn-auto-blink" onclick="toggleAutoBlink()">👁️<span class="tooltip">Auto Blink</span></button>
+  <button class="ctrl-btn active" id="btn-follow" onclick="toggleMouseFollow()">🎯<span class="tooltip">Eye Follow</span></button>
+  <button class="ctrl-btn active" id="btn-breath" onclick="toggleBreathing()">💨<span class="tooltip">Breathing</span></button>
+  <button class="ctrl-btn" id="btn-physics" onclick="togglePhysicsDebug()">⚙️<span class="tooltip">Physics</span></button>
+</div>
+
+<div id="voice-selector">
+  <h3>🎤 SELECT VOICE</h3>
+  <div id="voice-list"></div>
+</div>
+
+<div id="tts-status">🔊 Speaking...</div>
+
+<div id="chat-panel">
+  <div id="speech-bubble">
+    <div class="char-name">✦ TSUBAKI</div>
+    <div id="speech-text"></div>
+  </div>
+  <div id="input-area">
+    <input type="text" id="text-input" placeholder="Type a message for Tsubaki to say..." autocomplete="off" spellcheck="false">
+    <button class="btn" id="send-btn" onclick="sendMessage()">▶</button>
+    <button class="btn" id="stop-btn" onclick="stopSpeaking()" style="display:none;">⏹</button>
+  </div>
+</div>
+
+<script src="live2dcubismcore.min.js"></script>
+
+<script>
+// ====================================================================
+//  STATE
+// ====================================================================
+const S = {
+  model: null, moc: null, gl: null, canvas: null,
+  textures: [], paramIndexCache: {},
+  glBuffers: [], shaderProg: null, maskShaderProg: null,
+  maskFBO: null, maskTex: null, maskSize: 512,
+  projMatrix: null, sortedIndices: [],
+  time: 0, lastTime: 0, dt: 0,
+  // Features
+  autoBlink: true, mouseFollow: true, breathing: true,
+  mouseX: 0, mouseY: 0,
+  lipVal: 0, isSpeaking: false,
+  targetExpr: {}, currentExpr: {},
+  selectedVoice: null, voices: [],
+  loaded: false,
+  // Blink
+  blinkState: 0, blinkTimer: 0, blinkCooldown: 3,
+  // Physics idle
+  idlePhase: Math.random() * Math.PI * 2,
+};
+
+// ====================================================================
+//  STARS
+// ====================================================================
+(function createStars() {
+  const c = document.getElementById('stars');
+  for (let i = 0; i < 70; i++) {
+    const s = document.createElement('div');
+    s.className = 'star';
+    const sz = Math.random() * 2.5 + 0.5;
+    s.style.cssText = `width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--dur:${Math.random()*3+2}s;animation-delay:${Math.random()*3}s;`;
+    c.appendChild(s);
+  }
+})();
+
+// ====================================================================
+//  SHADERS
+// ====================================================================
+const VS = `
+attribute vec2 a_pos;
+attribute vec2 a_uv;
+uniform mat4 u_proj;
+uniform mat4 u_clipMat;
+varying vec2 v_uv;
+varying vec4 v_clipPos;
+void main(){
+  gl_Position = u_proj * vec4(a_pos, 0.0, 1.0);
+  v_uv = a_uv;
+  v_clipPos = u_clipMat * vec4(a_pos, 0.0, 1.0);
+}`;
+
+const FS = `
+precision mediump float;
+varying vec2 v_uv;
+varying vec4 v_clipPos;
+uniform sampler2D u_tex;
+uniform sampler2D u_maskTex;
+uniform float u_opacity;
+uniform vec4 u_mulCol;
+uniform vec4 u_scrCol;
+uniform int u_useMask;
+uniform int u_invertMask;
+void main(){
+  vec4 c = texture2D(u_tex, v_uv);
+  c.rgb = c.rgb * u_mulCol.rgb;
+  c.rgb = c.rgb + u_scrCol.rgb - c.rgb * u_scrCol.rgb;
+  c.a *= u_opacity * u_mulCol.a;
+  if(u_useMask == 1){
+    vec2 muv = v_clipPos.xy / v_clipPos.w * 0.5 + 0.5;
+    float mv = texture2D(u_maskTex, muv).a;
+    if(u_invertMask == 1) mv = 1.0 - mv;
+    c.a *= mv;
+  }
+  if(c.a < 0.001) discard;
+  // premultiply
+  gl_FragColor = vec4(c.rgb * c.a, c.a);
+}`;
+
+const MASK_VS = `
+attribute vec2 a_pos;
+attribute vec2 a_uv;
+uniform mat4 u_proj;
+varying vec2 v_uv;
+void main(){
+  gl_Position = u_proj * vec4(a_pos, 0.0, 1.0);
+  v_uv = a_uv;
+}`;
+
+const MASK_FS = `
+precision mediump float;
+varying vec2 v_uv;
+uniform sampler2D u_tex;
+void main(){
+  gl_FragColor = vec4(0.0, 0.0, 0.0, texture2D(u_tex, v_uv).a);
+}`;
+
+// ====================================================================
+//  GL HELPERS
+// ====================================================================
+function mkShader(gl, src, type) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    console.error('Shader error:', gl.getShaderInfoLog(s));
+    return null;
+  }
+  return s;
+}
+
+function mkProg(gl, vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, mkShader(gl, vs, gl.VERTEX_SHADER));
+  gl.attachShader(p, mkShader(gl, fs, gl.FRAGMENT_SHADER));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+    console.error('Link error:', gl.getProgramInfoLog(p));
+    return null;
+  }
+  // Cache uniform/attrib locations
+  const locs = {};
+  const nUni = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < nUni; i++) {
+    const info = gl.getActiveUniform(p, i);
+    locs[info.name] = gl.getUniformLocation(p, info.name);
+  }
+  const nAtt = gl.getProgramParameter(p, gl.ACTIVE_ATTRIBUTES);
+  for (let i = 0; i < nAtt; i++) {
+    const info = gl.getActiveAttrib(p, i);
+    locs[info.name] = gl.getAttribLocation(p, info.name);
+  }
+  p._loc = locs;
+  return p;
+}
+
+function loadProgress(pct) {
+  document.getElementById('loading-bar').style.width = pct + '%';
+}
+
+// ====================================================================
+//  INIT WEBGL
+// ====================================================================
+function initGL() {
+  S.canvas = document.getElementById('live2d-canvas');
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  S.canvas.width = window.innerWidth * dpr;
+  S.canvas.height = window.innerHeight * dpr;
+
+  S.gl = S.canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: true });
+  if (!S.gl) { alert('WebGL not supported'); return false; }
+  const gl = S.gl;
+
+  S.shaderProg = mkProg(gl, VS, FS);
+  S.maskShaderProg = mkProg(gl, MASK_VS, MASK_FS);
+
+  // Mask FBO
+  S.maskTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, S.maskTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, S.maskSize, S.maskSize, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+  S.maskFBO = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, S.maskFBO);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, S.maskTex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+
+  return true;
+}
+
+// ====================================================================
+//  LOAD TEXTURE
+// ====================================================================
+function loadTex(gl, url) {
+  return new Promise((resolve, reject) => {
+    const tex = gl.createTexture();
+    const img = new Image();
+    img.onload = () => {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.bindTexture(gl.TEXTURE_2D, null);
+      resolve(tex);
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// ====================================================================
+//  LOAD MODEL
+// ====================================================================
+async function loadModel() {
+  const status = msg => { document.getElementById('loading-status').textContent = msg; console.log(msg); };
+
+  status('Waiting for Live2D Core...');
+  loadProgress(5);
+
+  await new Promise(resolve => {
+    if (typeof Live2DCubismCore !== 'undefined' && Live2DCubismCore.Version) {
+      Live2DCubismCore.then(() => resolve());
+    } else {
+      const iv = setInterval(() => {
+        if (typeof Live2DCubismCore !== 'undefined') {
+          clearInterval(iv);
+          Live2DCubismCore.then(() => resolve());
+        }
+      }, 100);
+    }
+  });
+
+  const ver = Live2DCubismCore.Version.csmGetVersion();
+  status('Core v' + ((ver >> 24) & 0xFF) + '.' + ((ver >> 16) & 0xFF) + '.' + (ver & 0xFFFF) + ' ready');
+  loadProgress(15);
+
+  // Load MOC3
+  status('Loading model binary...');
+  const mocBuf = await (await fetch('model/character.moc3')).arrayBuffer();
+  loadProgress(35);
+
+  status('Parsing MOC3...');
+  S.moc = Live2DCubismCore.Moc.fromArrayBuffer(mocBuf);
+  if (!S.moc) { status('ERROR: MOC3 parse failed'); return false; }
+
+  S.model = Live2DCubismCore.Model.fromMoc(S.moc);
+  if (!S.model) { status('ERROR: Model creation failed'); return false; }
+  loadProgress(45);
+
+  // Build param index cache
+  const params = S.model.parameters;
+  for (let i = 0; i < params.count; i++) {
+    S.paramIndexCache[params.ids[i]] = i;
+  }
+
+  console.log(`Model: ${params.count} params, ${S.model.parts.count} parts, ${S.model.drawables.count} drawables`);
+  console.log(`Canvas: ${S.model.canvasinfo.CanvasWidth}x${S.model.canvasinfo.CanvasHeight} PPU:${S.model.canvasinfo.PixelsPerUnit}`);
+
+  // Load textures
+  const gl = S.gl;
+  const texUrls = ['model/texture_00.png', 'model/texture_01.png', 'model/texture_02.png'];
+  for (let i = 0; i < texUrls.length; i++) {
+    status(`Loading texture ${i+1}/3...`);
+    S.textures[i] = await loadTex(gl, texUrls[i]);
+    loadProgress(50 + (i+1) * 13);
+  }
+
+  // Create GL buffers
+  status('Creating render buffers...');
+  const dc = S.model.drawables.count;
+  for (let i = 0; i < dc; i++) {
+    S.glBuffers[i] = {
+      vb: gl.createBuffer(),
+      ub: gl.createBuffer(),
+      ib: gl.createBuffer()
+    };
+  }
+  loadProgress(95);
+
+  // Set defaults
+  for (let i = 0; i < params.count; i++) {
+    params.values[i] = params.defaultValues[i];
+  }
+
+  // Initial update
+  S.model.update();
+  S.model.drawables.resetDynamicFlags();
+  updateSortOrder();
+
+  status('Ready!');
+  loadProgress(100);
+  return true;
+}
+
+// ====================================================================
+//  PARAM HELPERS
+// ====================================================================
+function pi(id) { return S.paramIndexCache[id] ?? -1; }
+
+function sp(id, val) {
+  const i = pi(id); if (i < 0) return;
+  const p = S.model.parameters;
+  p.values[i] = Math.max(p.minimumValues[i], Math.min(p.maximumValues[i], val));
+}
+
+function gp(id) {
+  const i = pi(id); return i >= 0 ? S.model.parameters.values[i] : 0;
+}
+
+function lp(id, target, speed) {
+  const i = pi(id); if (i < 0) return;
+  const p = S.model.parameters;
+  const clamped = Math.max(p.minimumValues[i], Math.min(p.maximumValues[i], target));
+  p.values[i] += (clamped - p.values[i]) * Math.min(1, speed * S.dt);
+}
+
+// ====================================================================
+//  ANIMATIONS
+// ====================================================================
+function updateBlink(dt) {
+  if (!S.autoBlink) return;
+  S.blinkCooldown -= dt;
+  if (S.blinkCooldown <= 0 && S.blinkState === 0) {
+    S.blinkState = 1; S.blinkTimer = 0;
+  }
+  const spd = 14;
+  if (S.blinkState === 1) {
+    S.blinkTimer += dt * spd;
+    const v = Math.max(0, 1 - S.blinkTimer);
+    sp('ParamEyeROpen', v); sp('ParamEyeLOpen', v);
+    if (S.blinkTimer >= 1) { S.blinkState = 2; S.blinkTimer = 0; }
+  } else if (S.blinkState === 2) {
+    sp('ParamEyeROpen', 0); sp('ParamEyeLOpen', 0);
+    S.blinkTimer += dt;
+    if (S.blinkTimer > 0.04) { S.blinkState = 3; S.blinkTimer = 0; }
+  } else if (S.blinkState === 3) {
+    S.blinkTimer += dt * spd;
+    const v = Math.min(1, S.blinkTimer);
+    sp('ParamEyeROpen', v); sp('ParamEyeLOpen', v);
+    if (S.blinkTimer >= 1) {
+      S.blinkState = 0; S.blinkTimer = 0;
+      S.blinkCooldown = 1.5 + Math.random() * 4;
+    }
+  } else {
+    sp('ParamEyeROpen', 1); sp('ParamEyeLOpen', 1);
+  }
+}
+
+function updateBreath(dt) {
+  if (!S.breathing) return;
+  sp('ParamBreath', Math.sin(S.time * 2.2) * 0.5 + 0.5);
+}
+
+function updateMouseFollow(dt) {
+  if (!S.mouseFollow) return;
+  const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+  const dx = (S.mouseX - cx) / cx, dy = (S.mouseY - cy) / cy;
+  lp('ParamAngleX', dx * 30, 4);
+  lp('ParamAngleY', -dy * 30, 4);
+  lp('ParamAngleZ', dx * -10, 3);
+  lp('ParamBodyAngleX', dx * 10, 2.5);
+  lp('ParamBodyAngleY', -dy * 5, 2.5);
+  lp('ParamBodyAngleZ', dx * -5, 2.5);
+  lp('ParamEyeBallX', dx * 1, 8);
+  lp('ParamEyeBallY', -dy * 1, 8);
+}
+
+function updateIdleSway(dt) {
+  if (S.mouseFollow) return;
+  const t = S.time + S.idlePhase;
+  lp('ParamAngleX', Math.sin(t * 0.6) * 8, 2);
+  lp('ParamAngleY', Math.sin(t * 0.4) * 5, 2);
+  lp('ParamAngleZ', Math.sin(t * 0.3) * 4, 2);
+  lp('ParamBodyAngleX', Math.sin(t * 0.5) * 3, 1.5);
+  lp('ParamEyeBallX', Math.sin(t * 0.8) * 0.3, 3);
+  lp('ParamEyeBallY', Math.sin(t * 0.6) * 0.2, 3);
+}
+
+function updateLipSync(dt) {
+  const target = S.isSpeaking ? S.lipVal : 0;
+  const cur = gp('ParamMouthOpenY');
+  const nv = cur + (target - cur) * Math.min(1, 18 * dt);
+  sp('ParamMouthOpenY', nv);
+  sp('JawOpen', nv * 0.4);
+}
+
+function updateExpressions(dt) {
+  for (const [param, tv] of Object.entries(S.targetExpr)) {
+    lp(param, tv, 6);
+  }
+}
+
+// ====================================================================
+//  EXPRESSIONS
+// ====================================================================
+function setExpression(name) {
+  // Set all buttons to zero first, then set the active one
+  const base = { Button1: 0, Button2: 0, Button3: 0, Button4: 0, Button7: 0 };
+  switch(name) {
+    case 'neutral': S.targetExpr = base; break;
+    case 'blush': S.targetExpr = {...base, Button2: 1}; break;
+    case 'cry': S.targetExpr = {...base, Button4: 1}; break;
+    case 'angry': S.targetExpr = {...base, Button1: 1}; break;
+    case 'love': S.targetExpr = {...base, Button7: 1}; break;
+    case 'dead': S.targetExpr = {...base, Button3: 1}; break;
+  }
+}
+
+// ====================================================================
+//  SORT ORDER
+// ====================================================================
+function updateSortOrder() {
+  const d = S.model.drawables;
+  S.sortedIndices = [];
+  for (let i = 0; i < d.count; i++) S.sortedIndices.push(i);
+  S.sortedIndices.sort((a, b) => d.renderOrders[a] - d.renderOrders[b]);
+}
+
+// ====================================================================
+//  PROJECTION
+// ====================================================================
+function calcProjection() {
+  const c = S.canvas;
+  const aspect = c.width / c.height;
+  const ci = S.model.canvasinfo;
+  const mW = ci.CanvasWidth / ci.PixelsPerUnit;
+  const mH = ci.CanvasHeight / ci.PixelsPerUnit;
+
+  let scale = aspect > (mW/mH) ? 2.0 / mH : 2.0 / mW;
+  scale *= 1.35; // zoom in a bit
+
+  S.projMatrix = [
+    scale / aspect, 0, 0, 0,
+    0, scale, 0, 0,
+    0, 0, 1, 0,
+    0, -0.3, 0, 1  // shift down slightly
+  ];
+}
+
+// ====================================================================
+//  RENDER
+// ====================================================================
+const BLEND_ADD = 1, BLEND_MUL = 2, FLAG_DOUBLE = 4, FLAG_INVERT = 8;
+const DYN_VISIBLE = 1;
+
+function render() {
+  const gl = S.gl, c = S.canvas, d = S.model.drawables;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth * dpr, h = window.innerHeight * dpr;
+  if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+
+  calcProjection();
+  updateSortOrder();
+
+  gl.viewport(0, 0, c.width, c.height);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.disable(gl.DEPTH_TEST);
+
+  // --- Pass 1: Masks ---
+  renderMasks(gl, d);
+
+  // --- Pass 2: Drawables ---
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, c.width, c.height);
+
+  const p = S.shaderProg, L = p._loc;
+  gl.useProgram(p);
+  gl.uniformMatrix4fv(L.u_proj, false, S.projMatrix);
+
+  const I4 = [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+
+  for (const i of S.sortedIndices) {
+    if (!(d.dynamicFlags[i] & DYN_VISIBLE)) continue;
+
+    const opacity = d.opacities[i];
+    if (opacity <= 0.001) continue;
+
+    const vc = d.vertexCounts[i], ic = d.indexCounts[i];
+    if (vc === 0 || ic === 0) continue;
+
+    const texIdx = d.textureIndices[i];
+    if (texIdx < 0 || texIdx >= S.textures.length || !S.textures[texIdx]) continue;
+
+    // Parent part opacity
+    let partOp = 1;
+    const ppIdx = d.parentPartIndices[i];
+    if (ppIdx >= 0 && ppIdx < S.model.parts.count) {
+      partOp = S.model.parts.opacities[ppIdx];
+    }
+    const finalOp = opacity * partOp;
+    if (finalOp <= 0.001) continue;
+
+    const cf = d.constantFlags[i];
+    const blendMode = cf & 3;
+    const doubleSided = (cf & FLAG_DOUBLE) !== 0;
+    const invertMask = (cf & FLAG_INVERT) !== 0;
+
+    // Blend
+    switch (blendMode) {
+      case BLEND_ADD: gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE); break;
+      case BLEND_MUL: gl.blendFuncSeparate(gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE); break;
+      default: gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA); break;
+    }
+
+    if (doubleSided) gl.disable(gl.CULL_FACE);
+    else { gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW); }
+
+    // Buffers
+    const buf = S.glBuffers[i];
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf.vb);
+    gl.bufferData(gl.ARRAY_BUFFER, d.vertexPositions[i], gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(L.a_pos);
+    gl.vertexAttribPointer(L.a_pos, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, buf.ub);
+    gl.bufferData(gl.ARRAY_BUFFER, d.vertexUvs[i], gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(L.a_uv);
+    gl.vertexAttribPointer(L.a_uv, 2, gl.FLOAT, false, 0, 0);
+
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf.ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, d.indices[i], gl.DYNAMIC_DRAW);
+
+    // Texture
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, S.textures[texIdx]);
+    gl.uniform1i(L.u_tex, 0);
+
+    gl.uniform1f(L.u_opacity, finalOp);
+
+    // Multiply/screen colors (flat array, 4 per drawable)
+    const mi = i * 4;
+    gl.uniform4f(L.u_mulCol, d.multiplyColors[mi], d.multiplyColors[mi+1], d.multiplyColors[mi+2], d.multiplyColors[mi+3]);
+    gl.uniform4f(L.u_scrCol, d.screenColors[mi], d.screenColors[mi+1], d.screenColors[mi+2], d.screenColors[mi+3]);
+
+    // Mask
+    const mc = d.maskCounts[i];
+    if (mc > 0) {
+      gl.uniform1i(L.u_useMask, 1);
+      gl.uniform1i(L.u_invertMask, invertMask ? 1 : 0);
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, S.maskTex);
+      gl.uniform1i(L.u_maskTex, 1);
+      gl.uniformMatrix4fv(L.u_clipMat, false, S.projMatrix);
+    } else {
+      gl.uniform1i(L.u_useMask, 0);
+      gl.uniformMatrix4fv(L.u_clipMat, false, I4);
+    }
+
+    gl.drawElements(gl.TRIANGLES, ic, gl.UNSIGNED_SHORT, 0);
+  }
+  gl.disable(gl.CULL_FACE);
+}
+
+function renderMasks(gl, d) {
+  let need = false;
+  for (let i = 0; i < d.count; i++) if (d.maskCounts[i] > 0) { need = true; break; }
+  if (!need) return;
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, S.maskFBO);
+  gl.viewport(0, 0, S.maskSize, S.maskSize);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  const p = S.maskShaderProg, L = p._loc;
+  gl.useProgram(p);
+  gl.uniformMatrix4fv(L.u_proj, false, S.projMatrix);
+  gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  gl.disable(gl.CULL_FACE);
+
+  const drawn = new Set();
+  for (let i = 0; i < d.count; i++) {
+    if (d.maskCounts[i] <= 0) continue;
+    const masks = d.masks[i];
+    for (let m = 0; m < d.maskCounts[i]; m++) {
+      const mi = masks[m];
+      if (drawn.has(mi)) continue;
+      drawn.add(mi);
+
+      const vc = d.vertexCounts[mi], ic = d.indexCounts[mi];
+      if (vc === 0 || ic === 0) continue;
+      const ti = d.textureIndices[mi];
+      if (ti < 0 || ti >= S.textures.length) continue;
+
+      const buf = S.glBuffers[mi];
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf.vb);
+      gl.bufferData(gl.ARRAY_BUFFER, d.vertexPositions[mi], gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(L.a_pos);
+      gl.vertexAttribPointer(L.a_pos, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf.ub);
+      gl.bufferData(gl.ARRAY_BUFFER, d.vertexUvs[mi], gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(L.a_uv);
+      gl.vertexAttribPointer(L.a_uv, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buf.ib);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, d.indices[mi], gl.DYNAMIC_DRAW);
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, S.textures[ti]);
+      gl.uniform1i(L.u_tex, 0);
+
+      gl.drawElements(gl.TRIANGLES, ic, gl.UNSIGNED_SHORT, 0);
+    }
+  }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+// ====================================================================
+//  MAIN LOOP
+// ====================================================================
+function loop(ts) {
+  if (!S.loaded) { requestAnimationFrame(loop); return; }
+
+  const now = ts / 1000;
+  S.dt = S.lastTime > 0 ? Math.min(now - S.lastTime, 0.1) : 1/60;
+  S.lastTime = now;
+  S.time += S.dt;
+
+  updateBlink(S.dt);
+  updateBreath(S.dt);
+  updateMouseFollow(S.dt);
+  updateIdleSway(S.dt);
+  updateLipSync(S.dt);
+  updateExpressions(S.dt);
+
+  S.model.update();
+  render();
+  S.model.drawables.resetDynamicFlags();
+
+  requestAnimationFrame(loop);
+}
+
+// ====================================================================
+//  TTS
+// ====================================================================
+function initTTS() {
+  if (!('speechSynthesis' in window)) return;
+  const load = () => {
+    S.voices = speechSynthesis.getVoices();
+    const list = document.getElementById('voice-list');
+    list.innerHTML = '';
+    const seen = new Set();
+    S.voices.forEach((v, idx) => {
+      if (seen.has(v.name)) return;
+      seen.add(v.name);
+      const div = document.createElement('div');
+      div.className = 'voice-option';
+      div.textContent = `${v.name} (${v.lang})`;
+      div.onclick = () => {
+        S.selectedVoice = v;
+        document.querySelectorAll('.voice-option').forEach(e => e.classList.remove('selected'));
+        div.classList.add('selected');
+      };
+      list.appendChild(div);
+      if (!S.selectedVoice) {
+        // Try to find a good default
+        if (v.lang.startsWith('ja') || v.lang.startsWith('en')) {
+          S.selectedVoice = v;
+          div.classList.add('selected');
+        }
+      }
+    });
+    if (!S.selectedVoice && S.voices.length > 0) {
+      S.selectedVoice = S.voices[0];
+      list.firstChild && list.firstChild.classList.add('selected');
+    }
+  };
+  speechSynthesis.onvoiceschanged = load;
+  setTimeout(load, 100);
+  load();
+}
+
+let lipAF = null;
+
+function speakText(text) {
+  if (!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  if (lipAF) cancelAnimationFrame(lipAF);
+
+  const utt = new SpeechSynthesisUtterance(text);
+  if (S.selectedVoice) utt.voice = S.selectedVoice;
+  utt.rate = 1.0;
+  utt.pitch = 1.15;
+
+  S.isSpeaking = true;
+  document.getElementById('tts-status').classList.add('visible');
+  document.getElementById('send-btn').style.display = 'none';
+  document.getElementById('stop-btn').style.display = 'flex';
+  document.getElementById('stop-btn').classList.add('speaking');
+
+  let lt = 0;
+  const animLip = () => {
+    if (!S.isSpeaking) return;
+    lt += 0.06;
+    S.lipVal = Math.max(0, Math.min(1,
+      0.35 + Math.sin(lt * 9) * 0.2 + Math.sin(lt * 14.7) * 0.15 +
+      Math.sin(lt * 22.3) * 0.1 + Math.random() * 0.12
+    ));
+    lipAF = requestAnimationFrame(animLip);
+  };
+
+  utt.onstart = animLip;
+  utt.onend = finishSpeak;
+  utt.onerror = finishSpeak;
+  utt.onboundary = (e) => { if (e.name === 'word') S.lipVal = 0.5 + Math.random() * 0.4; };
+
+  speechSynthesis.speak(utt);
+}
+
+function finishSpeak() {
+  S.isSpeaking = false; S.lipVal = 0;
+  if (lipAF) cancelAnimationFrame(lipAF);
+  document.getElementById('tts-status').classList.remove('visible');
+  document.getElementById('send-btn').style.display = 'flex';
+  document.getElementById('stop-btn').style.display = 'none';
+  document.getElementById('stop-btn').classList.remove('speaking');
+}
+
+function stopSpeaking() {
+  speechSynthesis.cancel();
+  finishSpeak();
+}
+
+// ====================================================================
+//  TYPEWRITER
+// ====================================================================
+async function typewriter(text, el) {
+  el.innerHTML = '';
+  document.getElementById('speech-bubble').classList.add('visible');
+  for (let i = 0; i < text.length; i++) {
+    el.innerHTML = text.substring(0, i + 1) + '<span class="cursor"></span>';
+    await new Promise(r => setTimeout(r, 25 + Math.random() * 18));
+  }
+  el.innerHTML = text;
+}
+
+// ====================================================================
+//  SEND MESSAGE
+// ====================================================================
+async function sendMessage() {
+  const inp = document.getElementById('text-input');
+  const text = inp.value.trim();
+  if (!text) return;
+  inp.value = '';
+
+  autoExpr(text);
+  await typewriter(text, document.getElementById('speech-text'));
+  speakText(text);
+}
+
+function autoExpr(text) {
+  const l = text.toLowerCase();
+  if (/love|heart|❤|cute|kawaii|好き|可愛い/i.test(l)) setExpression('love');
+  else if (/cry|sad|😢|sorry|悲|泣/i.test(l)) setExpression('cry');
+  else if (/angry|mad|hate|😠|怒|ムカ/i.test(l)) setExpression('angry');
+  else if (/blush|embarrass|shy|😳|恥|照/i.test(l)) setExpression('blush');
+  else setExpression('neutral');
+}
+
+// ====================================================================
+//  UI TOGGLES
+// ====================================================================
+function toggleVoiceSelector() { document.getElementById('voice-selector').classList.toggle('visible'); }
+function toggleAutoBlink() {
+  S.autoBlink = !S.autoBlink;
+  document.getElementById('btn-auto-blink').classList.toggle('active', S.autoBlink);
+  if (!S.autoBlink) { sp('ParamEyeROpen', 1); sp('ParamEyeLOpen', 1); S.blinkState = 0; }
+}
+function toggleMouseFollow() {
+  S.mouseFollow = !S.mouseFollow;
+  document.getElementById('btn-follow').classList.toggle('active', S.mouseFollow);
+}
+function toggleBreathing() {
+  S.breathing = !S.breathing;
+  document.getElementById('btn-breath').classList.toggle('active', S.breathing);
+}
+function togglePhysicsDebug() {
+  document.getElementById('btn-physics').classList.toggle('active');
+  // Log all current param values for debugging
+  const p = S.model.parameters;
+  console.group('Current Parameters');
+  for (let i = 0; i < p.count; i++) {
+    if (p.values[i] !== p.defaultValues[i]) {
+      console.log(`${p.ids[i]}: ${p.values[i].toFixed(3)} (default: ${p.defaultValues[i].toFixed(3)}, range: ${p.minimumValues[i]}..${p.maximumValues[i]})`);
+    }
+  }
+  console.groupEnd();
+}
+
+// ====================================================================
+//  EVENT LISTENERS
+// ====================================================================
+document.addEventListener('mousemove', e => { S.mouseX = e.clientX; S.mouseY = e.clientY; });
+document.addEventListener('touchmove', e => { if (e.touches[0]) { S.mouseX = e.touches[0].clientX; S.mouseY = e.touches[0].clientY; } });
+
+document.getElementById('live2d-canvas').addEventListener('pointerdown', e => {
+  // Check if clicking on UI elements
+  if (e.target !== S.canvas) return;
+  // Random reaction
+  const reactions = ['neutral', 'blush', 'love'];
+  setExpression(reactions[Math.floor(Math.random() * reactions.length)]);
+  // Small head tilt reaction
+  const cx = window.innerWidth / 2;
+  const tilt = (e.clientX - cx) / cx * 15;
+  sp('ParamAngleZ', gp('ParamAngleZ') + tilt);
+});
+
+document.getElementById('text-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }
+});
+
+document.addEventListener('click', e => {
+  const vs = document.getElementById('voice-selector');
+  const btn = document.getElementById('btn-voice');
+  if (!vs.contains(e.target) && !btn.contains(e.target)) vs.classList.remove('visible');
+});
+
+window.addEventListener('resize', () => {
+  if (!S.loaded) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  S.canvas.width = window.innerWidth * dpr;
+  S.canvas.height = window.innerHeight * dpr;
+});
+
+// ====================================================================
+//  INIT
+// ====================================================================
+async function init() {
+  try {
+    if (!initGL()) return;
+    const ok = await loadModel();
+    if (!ok) return;
+    initTTS();
+    S.loaded = true;
+
+    setTimeout(() => {
+      const ls = document.getElementById('loading-screen');
+      ls.classList.add('hidden');
+      setTimeout(() => ls.style.display = 'none', 1000);
+    }, 600);
+
+    requestAnimationFrame(loop);
+    console.log('✨ Tsubaki AI Companion initialized!');
+  } catch (err) {
+    console.error('Init error:', err);
+    document.getElementById('loading-status').textContent = 'Error: ' + err.message;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
